@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const pdf = require('pdf-parse');
+const mammoth = require('mammoth');
+const { createWorker } = require('tesseract.js');
 
 // This function handles POST requests to the root of this router
 router.post('/', async (req, res) => {
@@ -18,12 +20,22 @@ router.post('/', async (req, res) => {
     const { content, filename } = req.body;
 
     let textContent;
+    let fileExtension = '';
+    
+    // Extract file extension from filename
+    if (filename) {
+      const parts = filename.split('.');
+      if (parts.length > 1) {
+        fileExtension = parts[parts.length - 1].toLowerCase();
+      }
+    }
 
     if (typeof content === 'string') {
       textContent = content;
-    } else if (content.mimeType && content.content) {
+    } else if (content && content.mimeType && content.content) {
       textContent = `Filename: ${filename}\nContent type: ${content.mimeType}\n`;
 
+      // Handle different file types
       if (content.mimeType === 'text/plain') {
         const decoded = Buffer.from(content.content, 'base64').toString('utf-8');
         textContent += decoded;
@@ -38,6 +50,35 @@ router.post('/', async (req, res) => {
         } catch (pdfError) {
           console.error('Error parsing PDF:', pdfError);
           textContent += "[Unable to extract PDF content]";
+        }
+      } else if (content.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+                fileExtension === 'docx') {
+        try {
+          // Convert base64 to buffer for DOCX processing
+          const docxBuffer = Buffer.from(content.content, 'base64');
+          // Extract text from DOCX
+          const result = await mammoth.extractRawText({ buffer: docxBuffer });
+          textContent += result.value;
+        } catch (docxError) {
+          console.error('Error parsing DOCX:', docxError);
+          textContent += "[Unable to extract DOCX content]";
+        }
+      } else if (content.mimeType.startsWith('image/')) {
+        // Handle image files (PNG, JPG, etc.)
+        try {
+          // Create a worker for OCR
+          const worker = await createWorker();
+          // Convert base64 to buffer for image processing
+          const imageBuffer = Buffer.from(content.content, 'base64');
+          // Recognize text in the image
+          const { data } = await worker.recognize(imageBuffer);
+          // Add extracted text to content
+          textContent += data.text;
+          // Terminate worker
+          await worker.terminate();
+        } catch (imageError) {
+          console.error('Error extracting text from image:', imageError);
+          textContent += "[Unable to extract text from image]";
         }
       } else {
         textContent += "[File content in base64 format - Unable to extract from this file type]";
@@ -115,9 +156,6 @@ router.post('/', async (req, res) => {
 }  
 \`\`\`  
 `;  
-
-    // Example usage:
-    // const analysis = await generateSummary(prompt);
 
     // Generate content with the prompt
     const result = await model.generateContent(prompt);

@@ -6,6 +6,7 @@ const dotenv = require("dotenv");
 const bodyParser = require('body-parser');
 
 const geminiRoute = require('./routes/gemniroutes.js'); // Make sure this path is correct
+const chatRoutes = require('./routes/gemnichat.js'); // Make sure this path is correct
 
 app.use(cors({
   origin: '*', // Allow requests from any origin
@@ -22,9 +23,18 @@ app.use(bodyParser.json({ limit: '50mb' })); // Also increase bodyParser limit
 
 // Connect the route handler to the /api/gemini-summarize endpoint
 app.use('/api/gemini-summarize', geminiRoute);
+app.use('/api/chat', chatRoutes);
 
 app.get("/", (req, res) => {
   res.send("🚀 Server is up and running! Are you a developer? 😏 I bet you didn't even check before panicking. Relax, it's all good! 🎉😂");
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    message: "Something went wrong on the server"
+  });
 });
 
 const PORT = process.env.PORT || 5000;

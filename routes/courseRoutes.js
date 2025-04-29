@@ -55,6 +55,39 @@ router.post('/enroll', async (req, res) => {
     }
   });
 
+// Get all enrolled courses for a user
+router.get('/allenroll', async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    // Validate input
+    if (!userId) {
+      return res.status(400).json({ message: 'Missing userId in query parameters' });
+    }
+
+    // Find the user's enrolled courses
+    const userCourse = await UserCourse.findOne({ userId });
+
+    if (!userCourse) {
+      return res.status(404).json({ message: 'User not found or not enrolled in any course' });
+    }
+
+    // Extract all course IDs
+    const enrolledCourseIds = userCourse.courses.map(course => course.courseId);
+
+    res.status(200).json({
+      message: 'Enrolled courses fetched successfully',
+      courses: enrolledCourseIds
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: 'Error fetching enrolled courses', 
+      error: error.message 
+    });
+  }
+});
+
+
 // Mark video as completed
 router.post('/progress', async (req, res) => {
     try {
@@ -121,6 +154,47 @@ router.post('/progress', async (req, res) => {
     }
   });
   
+// Get progress for a particular course
+router.get('/getprogress', async (req, res) => {
+  try {
+    const { userId, courseId } = req.query; // ⚡ From query params because it's GET
+
+    // Validate input
+    if (!userId || !courseId) {
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+
+    // Find user's course document
+    const userCourse = await UserCourse.findOne({ userId });
+    if (!userCourse) {
+      return res.status(404).json({ success: false, message: 'User not enrolled in any courses' });
+    }
+
+    // Find the specific course
+    const course = userCourse.courses.find(c => c.courseId === courseId);
+    if (!course) {
+      return res.status(404).json({ success: false, message: 'User not enrolled in this course' });
+    }
+
+    // Send list of videos with their progress
+    res.json({
+      success: true,
+      videos: course.videos.map(video => ({
+        videoId: video.videoId,
+        completed: video.completed
+      }))
+    });
+
+  } catch (error) {
+    console.error('Get progress error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching progress',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 
 // Get user's course progress
 router.get('/progress/:userId/:courseId', async (req, res) => {
